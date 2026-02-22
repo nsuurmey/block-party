@@ -1,0 +1,18 @@
+# Raw BOEM data files (too large for git; download per data/README.md)
+data/sale_*/
+data/leases/
+data/relinquishments/
+data/wells/
+
+# Python virtual environment
+.venv/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Generated outputs (except .gitkeep)
+outputs/*.png
+outputs/*.pdf
+
+# OS files
+.DS_Store
