@@ -9,14 +9,17 @@ from one BOEM sale ZIP.  Two naming conventions are supported:
 
 Usage
 -----
-    from boem_loader import load_sale, load_blocks
+    from boem_loader import load_sale, load_blocks, load_lease_history, load_lease_owners
 
-    sale = load_sale("data/lease-sales/sale_198")
+    sale   = load_sale("data/lease-sales/sale_198")
     blocks = load_blocks("data/shapefiles/blocks.shp")
+    leases = load_lease_history("data/lease-sales/cleaned_lease_history.csv")
+    owners = load_lease_owners("data/lease-sales/lseowndelimit.txt")
 """
 
 import fnmatch
 import os
+import re
 
 import geopandas as gpd
 import pandas as pd
@@ -176,25 +179,122 @@ def load_sale(sale_dir: str) -> dict[str, pd.DataFrame]:
     return {k: v for k, v in data.items() if v is not None}
 
 
-# ── Supplemental BOEM datasets (CSV / delimited) ────────────────────────────
+# ── Supplemental BOEM datasets ───────────────────────────────────────────────
+
+# -- Lease history (cleaned CSV from BOEM Lease List) -------------------------
+
+_STATUS_RE = re.compile(r"([A-Z]+)\s*(\d{2}/\d{2}/\d{4})?")
 
 
-def load_leases(path: str) -> pd.DataFrame:
-    """Load a BOEM active-lease CSV export → DataFrame."""
-    df = pd.read_csv(path)
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+def load_lease_history(path: str) -> pd.DataFrame:
+    """Load cleaned_lease_history.csv → DataFrame with parsed status + date.
+
+    Columns returned
+    ----------------
+    Lease_Number   : str   — 7-digit padded lease number (no G prefix)
+    Lease_Type     : str   — e.g. "O&G", "SLF"
+    Area_Code      : str   — protraction abbreviation (GC, MC, WR …)
+    Block_Number   : str   — block within the protraction area
+    Lease_Status   : str   — RELINQ | EXPIR | TERMED | PRIMRY | PROD | …
+    Status_Date    : datetime or NaT — date extracted from status field
+    Col_1          : int   — kept as-is (meaning TBD)
+    Col_6          : float — kept as-is (meaning TBD)
+    """
+    df = pd.read_csv(path, dtype=str)
+
+    # Rename known columns
+    df = df.rename(columns={
+        "Col_2": "Lease_Type",
+        "Col_3": "Area_Code",
+        "Col_4": "Block_Number",
+    })
+
+    # Parse Col_5 → Lease_Status + Status_Date
+    parsed = df["Col_5"].apply(_parse_status)
+    df["Lease_Status"] = parsed.str[0]
+    df["Status_Date"] = pd.to_datetime(parsed.str[1], format="%m/%d/%Y", errors="coerce")
+    df = df.drop(columns=["Col_5"])
+
+    # Clean up types
+    df["Lease_Number"] = df["Lease_Number"].str.strip().str.zfill(7)
+    df["Area_Code"] = df["Area_Code"].str.strip()
+    df["Block_Number"] = df["Block_Number"].str.strip()
+    df["Col_1"] = pd.to_numeric(df["Col_1"], errors="coerce")
+    df["Col_6"] = pd.to_numeric(df["Col_6"], errors="coerce")
+
     return df
+
+
+def _parse_status(raw: str) -> tuple[str, str]:
+    """Extract (status_code, date_string|'') from e.g. 'RELINQ09/09/2014'."""
+    m = _STATUS_RE.match(str(raw).strip())
+    if m:
+        return m.group(1), m.group(2) or ""
+    return str(raw).strip(), ""
+
+
+# -- Lease owner (delimited raw download from BOEM) ---------------------------
+
+_LSEOWN_NAMES = [
+    "Owner_Aliquot",   # 1 = full lease, A-Z = partial aliquot
+    "SN_Lse_Owner",    # unique record ID per ownership instance
+    "Asgn_Aprv_Date",  # assignment approval date
+    "Asgn_Eff_Date",   # assignment effective date
+    "Company_Number",  # MMS company number
+    "Lease_Number",    # lease ID (G-prefix for newer leases)
+    "Asgn_Status",     # T = terminated/inactive, C = current
+    "_unused",
+    "Aliquot_Echo",    # mirrors Owner_Aliquot (blank when '1')
+    "Pct_Own",         # ownership percentage
+    "Eff_Date",        # effective/recording date
+]
+
+
+def load_lease_owners(path: str) -> pd.DataFrame:
+    """Load lseowndelimit.txt (BOEM lease-owner history) → DataFrame.
+
+    Key columns
+    -----------
+    Lease_Number     : str      — with G-prefix preserved
+    Company_Number   : str      — 5-digit zero-padded
+    Asgn_Status      : str      — 'C' (current) or 'T' (terminated)
+    Pct_Own          : float    — ownership percentage
+    Asgn_Aprv_Date   : datetime — assignment approval date
+    Asgn_Eff_Date    : datetime — assignment effective date
+    Owner_Aliquot    : str      — '1' = full, 'A'-'Z' = partial
+    """
+    df = pd.read_csv(
+        path,
+        header=None,
+        names=_LSEOWN_NAMES,
+        dtype=str,
+        skipinitialspace=True,
+    )
+
+    # Clean join keys
+    df["Lease_Number"] = df["Lease_Number"].str.strip()
+    df["Company_Number"] = df["Company_Number"].str.strip().str.zfill(5)
+    df["Owner_Aliquot"] = df["Owner_Aliquot"].str.strip()
+    df["Asgn_Status"] = df["Asgn_Status"].str.strip()
+
+    # Parse dates
+    for col in ["Asgn_Aprv_Date", "Asgn_Eff_Date", "Eff_Date"]:
+        df[col] = pd.to_datetime(df[col].str.strip(), format="%Y%m%d", errors="coerce")
+
+    # Numeric
+    df["Pct_Own"] = pd.to_numeric(df["Pct_Own"], errors="coerce")
+
+    # Drop empty/redundant columns
+    df = df.drop(columns=["_unused", "Aliquot_Echo"])
+
+    return df
+
+
+# -- Wells and generic CSV ---------------------------------------------------
 
 
 def load_wells(path: str) -> pd.DataFrame:
     """Load a BOEM well/borehole CSV export → DataFrame."""
-    df = pd.read_csv(path)
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-    return df
-
-
-def load_relinquishments(path: str) -> pd.DataFrame:
-    """Load a BOEM relinquishment/expiration CSV export → DataFrame."""
     df = pd.read_csv(path)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
     return df
