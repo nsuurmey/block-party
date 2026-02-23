@@ -309,7 +309,8 @@ def load_master_sales(path: str, sale_number: int | None = None) -> pd.DataFrame
     df["Bid_Amount"] = pd.to_numeric(df["Bid_Amount"], errors="coerce")
     df["Acreage"] = pd.to_numeric(df["Acreage"], errors="coerce")
     _strip_col(df, "Lease_Number")
-    _strip_col(df, "Company_Number")
+    if "Company_Number" in df.columns:
+        df["Company_Number"] = df["Company_Number"].astype(str).str.strip().str.zfill(5)
     _strip_col(df, "Protraction_ID")
     _strip_col(df, "Block_Number")
     if sale_number is not None:
