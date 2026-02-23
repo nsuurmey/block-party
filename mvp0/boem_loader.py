@@ -9,12 +9,15 @@ from one BOEM sale ZIP.  Two naming conventions are supported:
 
 Usage
 -----
-    from boem_loader import load_sale, load_blocks, load_lease_history, load_lease_owners
+    from boem_loader import (load_sale, load_blocks, load_lease_history,
+        load_lease_owners, load_master_sales, load_boreholes)
 
     sale   = load_sale("data/lease-sales/sale_198")
     blocks = load_blocks("data/shapefiles/blocks.shp")
     leases = load_lease_history("data/lease-sales/cleaned_lease_history.csv")
     owners = load_lease_owners("data/lease-sales/lseowndelimit.txt")
+    sales  = load_master_sales("data/lease-sales/master_lease_sales.csv")
+    wells  = load_boreholes("data/wells/mv_boreholes_all.txt")
 """
 
 import fnmatch
@@ -290,14 +293,92 @@ def load_lease_owners(path: str) -> pd.DataFrame:
     return df
 
 
-# -- Wells and generic CSV ---------------------------------------------------
+# -- Master lease sales (pre-merged bid+tract CSV) ----------------------------
 
 
-def load_wells(path: str) -> pd.DataFrame:
-    """Load a BOEM well/borehole CSV export → DataFrame."""
-    df = pd.read_csv(path)
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+def load_master_sales(path: str, sale_number: int | None = None) -> pd.DataFrame:
+    """Load master_lease_sales.csv → DataFrame.
+
+    Columns: Sale_Number, Lease_Number, Bid_Amount, Company_Number,
+             Protraction_ID, Block_Number, Acreage, Source_Sale.
+    If *sale_number* is given, filter to that sale only.
+    """
+    df = pd.read_csv(path, dtype=str)
+    df.columns = df.columns.str.strip()
+    df["Sale_Number"] = pd.to_numeric(df["Sale_Number"], errors="coerce").astype("Int64")
+    df["Bid_Amount"] = pd.to_numeric(df["Bid_Amount"], errors="coerce")
+    df["Acreage"] = pd.to_numeric(df["Acreage"], errors="coerce")
+    _strip_col(df, "Lease_Number")
+    if "Company_Number" in df.columns:
+        df["Company_Number"] = df["Company_Number"].astype(str).str.strip().str.zfill(5)
+    _strip_col(df, "Protraction_ID")
+    _strip_col(df, "Block_Number")
+    if sale_number is not None:
+        df = df[df["Sale_Number"] == sale_number].copy()
     return df
+
+
+# -- Boreholes (BOEM well data) -----------------------------------------------
+
+from shapely.geometry import Point  # noqa: E402
+
+
+def load_boreholes(
+    path: str,
+    region: str = "G",
+    to_utm: bool = True,
+) -> gpd.GeoDataFrame:
+    """Load mv_boreholes_all.txt → GeoDataFrame with point geometries.
+
+    Parameters
+    ----------
+    path   : path to the BOEM borehole CSV/TXT download
+    region : filter to this REGION_CODE ('G' = GOM).  None to keep all.
+    to_utm : reproject to UTM 15N (EPSG:26915) for distance calculations
+
+    Key columns
+    -----------
+    Spud_Date        : datetime — well spud date
+    Area_Code        : str     — 2-letter protraction abbreviation
+    Block_Number     : str     — block within protraction area
+    Water_Depth      : float   — in feet
+    Well_Type        : str     — D=Development, E=Exploration
+    Borehole_Status  : str     — PA, ST, COM, TA, CNL …
+    Company_Name     : str     — operator name
+    geometry         : Point   — surface location (UTM or lon/lat)
+    """
+    df = pd.read_csv(path, dtype=str)
+    df.columns = df.columns.str.strip()
+
+    if region is not None:
+        df = df[df["REGION_CODE"].str.strip() == region].copy()
+
+    # Parse key columns
+    df["Spud_Date"] = pd.to_datetime(df["WELL_SPUD_DATE"], format="mixed", errors="coerce")
+    df["Water_Depth"] = pd.to_numeric(df["WATER_DEPTH"], errors="coerce")
+    df["Area_Code"] = df["BOTM_AREA_CODE"].str.strip()
+    df["Block_Number"] = df["BOTM_BLOCK_NUMBER"].str.strip()
+    df["Well_Type"] = df["WELL_TYPE_CODE"].str.strip()
+    df["Borehole_Status"] = df["BOREHOLE_STAT_CD"].str.strip()
+    df["Company_Name"] = df["COMPANY_NAME"].str.strip()
+
+    # Build point geometry from surface lat/lon
+    lat = pd.to_numeric(df["SURF_LATITUDE"], errors="coerce")
+    lon = pd.to_numeric(df["SURF_LONGITUDE"], errors="coerce")
+    geometry = gpd.points_from_xy(lon, lat, crs="EPSG:4326")
+
+    # Keep useful columns only
+    keep = [
+        "API_WELL_NUMBER", "WELL_NAME", "Spud_Date", "Area_Code",
+        "Block_Number", "Water_Depth", "Well_Type", "Borehole_Status",
+        "Company_Name", "SURF_LATITUDE", "SURF_LONGITUDE",
+    ]
+    gdf = gpd.GeoDataFrame(df[keep].copy(), geometry=geometry)
+
+    if to_utm:
+        gdf = gdf.to_crs(UTM15N)
+
+    return gdf
 
 
 # ── Spatial ──────────────────────────────────────────────────────────────────
