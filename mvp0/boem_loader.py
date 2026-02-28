@@ -198,7 +198,7 @@ def load_lease_history(path: str) -> pd.DataFrame:
     Lease_Type     : str   — e.g. "O&G", "SLF"
     Area_Code      : str   — protraction abbreviation (GC, MC, WR …)
     Block_Number   : str   — block within the protraction area
-    Lease_Status   : str   — RELINQ | EXPIR | TERMED | PRIMRY | PROD | …
+    Lease_Status   : str   — RELINQ | EXPIR | TERMIN | PRIMRY | PROD | …
     Status_Date    : datetime or NaT — date extracted from status field
     Col_1          : int   — kept as-is (meaning TBD)
     Col_6          : float — kept as-is (meaning TBD)
@@ -319,6 +319,71 @@ def load_master_sales(path: str, sale_number: int | None = None) -> pd.DataFrame
 
 
 # -- Boreholes (BOEM well data) -----------------------------------------------
+
+# ── Lease-status helpers ─────────────────────────────────────────────────────
+
+# BOEM lease-status codes that indicate a lease was actively in effect.
+ACTIVE_STATUSES: list[str] = ["PRIMRY", "PROD", "SOO", "SOP", "UNIT", "DSO", "OPERNS"]
+
+# Codes that mark a terminal event; note the correct spelling is TERMIN, not TERMED.
+TERMINAL_STATUSES: list[str] = ["EXPIR", "RELINQ", "TERMIN", "CANCEL"]
+
+
+def active_leases_at(
+    lh: pd.DataFrame,
+    lo: pd.DataFrame,
+    as_of: pd.Timestamp,
+    aliquot: str = "1",
+) -> pd.DataFrame:
+    """Return (company, lease) pairs that were active on *as_of* date.
+
+    Parameters
+    ----------
+    lh     : output of load_lease_history()
+    lo     : output of load_lease_owners()
+    as_of  : the reference date (e.g. sale date)
+    aliquot: '1' = primary / full-lease aliquot only (default)
+
+    Returns
+    -------
+    DataFrame with columns from *lh* plus Company_Number from *lo*.
+    A lease is considered active if its current status is in ACTIVE_STATUSES,
+    or if it has a terminal status with Status_Date strictly after *as_of*
+    (meaning it was still in effect on the sale day).
+    """
+    mask = lh["Lease_Status"].isin(ACTIVE_STATUSES) | (
+        lh["Lease_Status"].isin(TERMINAL_STATUSES) & (lh["Status_Date"] > as_of)
+    )
+    active = lh[mask].copy()
+    active["Lease_G"] = "G" + active["Lease_Number"].str.lstrip("0")
+
+    owners = (
+        lo[lo["Asgn_Eff_Date"] <= as_of]
+        .query(f"Owner_Aliquot == '{aliquot}'")
+        .sort_values("Asgn_Eff_Date")
+        .drop_duplicates("Lease_Number", keep="last")
+    )
+
+    matched = active.merge(
+        owners[["Lease_Number", "Company_Number"]],
+        left_on="Lease_G",
+        right_on="Lease_Number",
+        how="inner",
+        suffixes=("_lh", "_lo"),
+    )
+
+    unmatched = len(active) - len(matched)
+    if unmatched > 0:
+        import warnings
+        warnings.warn(
+            f"active_leases_at: {unmatched} of {len(active)} active leases could not "
+            f"be matched to an owner in lseowndelimit.txt (old pre-G-prefix leases or "
+            f"missing assignment records). Matched {len(matched)}.",
+            stacklevel=2,
+        )
+
+    return matched
+
 
 from shapely.geometry import Point  # noqa: E402
 
