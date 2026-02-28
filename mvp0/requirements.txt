@@ -5,3 +5,5 @@ folium>=0.15
 shapely>=2.0
 pyproj>=3.6
 jupyter>=1.0
+libpysal>=4.7
+scikit-learn>=1.3
