@@ -1,0 +1,70 @@
+                  BUREAU OF OCEAN ENERGY MANAGEMENT
+                 Lease Sale Data File Record Layouts
+
+
+                            PREBID.txt
+
+  Field Name              Starting Column       Number of Columns
+_________________________________________________________________
+
+  Lease Number                        1                         5
+* Protraction Identifier (map)        7                         7
+  Block Number                       16                         6
+  Acreage (should divide by 1,000)   25                         7
+  Royalty Rate                       33                        12 **
+  Primary Lease Term in years        53                         2
+  Number of Bids                     64                         2
+
+
+
+*  Refer to translation files
+** Royalty Rate was listed as 11 columns in previous versions
+
+
+
+                              BID.txt
+
+  Field Name              Starting Column       Number of Columns
+_________________________________________________________________
+
+  Sale Number                         1                         7
+  Lease Number                        9                         7
+  Bid Amount                         17                        10
+* Company Number                     28                         5
+  Percentage of Bid                  36                         8
+
+
+*  Refer to translation files
+
+
+
+
+
+                       MAPS.txt (Translation File)
+
+  Field Name              Starting Column       Number of Columns
+_________________________________________________________________
+
+
+  Map Number                          1                         3
+  Map Name                            5                        52
+  Protraction Identifier             55                         7
+
+
+
+
+                        COMPANY2.txt (Translation File)
+
+  Field Name              Starting Column       Number of Columns
+_________________________________________________________________
+
+
+  Company Qualification Number        1                         5
+  Company Name                        7                        70
+
+
+
+
+
+
+

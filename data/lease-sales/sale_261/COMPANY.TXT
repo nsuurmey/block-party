@@ -1,0 +1,26 @@
+00059 Hess Corporation
+00078 Chevron U.S.A. Inc.
+00689 Shell Offshore Inc.
+00730 Walter Oil & Gas Corporation
+01308 Ridgewood Energy Corporation
+01999 Houston Energy, L.P.
+02058 LLOG Exploration Offshore, L.L.C.
+02219 Anadarko US Offshore LLC
+02277 Woodside Energy (Deepwater) Inc.
+02417 Arena Energy, LLC
+02481 BP Exploration & Production Inc.
+02647 Murphy Exploration & Production Company - USA
+02668 Red Willow Offshore, LLC
+02748 Equinor Gulf of Mexico LLC
+02790 Focus Exploration, LLC
+02805 Repsol E&P USA LLC
+02961 Byron Energy Inc.
+03194 CSL Exploration, LP
+03247 Talos Energy Offshore LLC
+03362 Kosmos Energy Gulf of Mexico Operations, LLC
+03394 CL&F Offshore LLC
+03481 Cantium, LLC
+03570 Beacon Offshore Energy Exploration LLC
+03672 QuarterNorth Energy LLC
+03713 Westlawn GOM Asset 1 Holdco LLC
+03747 Alta Mar Energy Operating, LLC
